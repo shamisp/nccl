@@ -692,6 +692,8 @@ exit:
   return ret;
 }
 
+NCCL_PARAM(IpTos, "IP_TOS", NCCL_IP_TOS);
+
 ncclResult_t ncclSocketInit(struct ncclSocket* sock, union ncclSocketAddress* addr, uint64_t magic, enum ncclSocketType type, volatile uint32_t* abortFlag, int asyncFlag) {
   ncclResult_t ret = ncclSuccess;
 
@@ -706,9 +708,12 @@ ncclResult_t ncclSocketInit(struct ncclSocket* sock, union ncclSocketAddress* ad
   sock->fd = -1;
   sock->acceptFd = -1;
 
+
   if (addr) {
     /* IPv4/IPv6 support */
     int family;
+    int ipTos = ncclParamIpTos();
+
     memcpy(&sock->addr, addr, sizeof(union ncclSocketAddress));
     family = sock->addr.sa.sa_family;
     if (family != AF_INET && family != AF_INET6) {
@@ -726,6 +731,12 @@ ncclResult_t ncclSocketInit(struct ncclSocket* sock, union ncclSocketAddress* ad
       WARN("ncclSocketInit: Socket creation failed : %s", strerror(errno));
       ret = ncclSystemError;
       goto fail;
+    }
+    if (ipTos != -1) {
+        if (family == AF_INET)
+            SYSCHECK(setsockopt(sock->fd, IPPROTO_IP, IP_TOS, &ipTos, sizeof(ipTos)), "setsockopt");
+        else if(family == AF_INET6)
+            SYSCHECK(setsockopt(sock->fd, IPPROTO_IPV6, IPV6_TCLASS, &ipTos, sizeof(ipTos)), "setsockopt");
     }
   } else {
     memset(&sock->addr, 0, sizeof(union ncclSocketAddress));
